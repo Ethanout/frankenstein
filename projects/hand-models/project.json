@@ -1,0 +1,16 @@
+{
+  "id": "hand-models",
+  "components": {
+    "resourcepack": {
+      "type": "resourcepack",
+      "source": "resourcepack/first_person_hand_models_26.2"
+    }
+  },
+  "targets": {
+    "resourcepack": {
+      "components": [
+        "resourcepack"
+      ]
+    }
+  }
+}

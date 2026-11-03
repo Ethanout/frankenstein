@@ -1,0 +1,14 @@
+{
+  "name": "combined-project",
+  "description": "",
+  "require": [
+    "bolt",
+    "bolt_expressions"
+  ],
+  "data_pack": {
+    "load": [
+      "src"
+    ]
+  },
+  "output": "build"
+}

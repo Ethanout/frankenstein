@@ -1,0 +1,401 @@
+from beet import Function
+from math import ceil, floor, log2
+
+NS = "frankenstein"
+OBJ = "fpow"
+S = 1048576
+SEGMENTS = 32
+LN2 = 0.6931471805599453
+INV_LN2 = 1.4426950408889634
+
+
+def number(value):
+    # Brigadier's Snapshot float parser accepts decimal notation but rejects
+    # exponent notation. Keep enough fixed-point digits for 2^-126 while
+    # trimming the generated text so command lines remain manageable.
+    text = format(float(value), ".40f").rstrip("0").rstrip(".")
+    if text in ("", "-0"):
+        return "0"
+    if "." not in text:
+        text += ".0"
+    return text
+
+
+def constant(value):
+    return number(value)
+
+
+def storage(path):
+    return f'{{type:"minecraft:storage",storage:"{NS}:pow",path:"{path}"}}'
+
+
+def product(*operands):
+    return '{type:"minecraft:product",operands:[' + ",".join(operands) + "]}"
+
+
+def sum_of(*operands):
+    return '{type:"minecraft:sum",operands:[' + ",".join(operands) + "]}"
+
+
+def compute_score(player, provider, scale=S):
+    return f"execute store result score {player} {OBJ} run compute default {provider} scale {number(scale)}"
+
+
+def compute_storage(path, provider, scale=S):
+    return f"execute store result storage {NS}:pow {path} double {number(1 / scale)} run compute default {provider} scale {number(scale)}"
+
+
+def put(path, lines):
+    ctx.data[Function][f"{NS}:{path}"] = Function(lines)
+
+
+AX = product(storage("io.x"), storage("tmp.sign"))
+
+
+put("load", [
+    f"scoreboard objectives add {OBJ} dummy",
+    f"scoreboard players set #-1 {OBJ} -1",
+    f"scoreboard players set #2 {OBJ} 2",
+    f"data modify storage {NS}:pow config set value {{scale:{S},segments:{SEGMENTS},degree:3}}",
+])
+
+put("pow/storage", [
+    f"data modify storage {NS}:pow tmp set value {{sign:1.0d,negate_result:0b,status:0}}",
+    f"data remove storage {NS}:pow io.result",
+    compute_score("#x_sign", storage("io.x"), 3.0e38),
+    compute_score("#y", storage("io.y")),
+    compute_score("#x_one", sum_of(storage("io.x"), "-1")),
+    f"scoreboard players set #done {OBJ} 0",
+    f"execute if score #y {OBJ} matches 0 run function {NS}:special/y_zero",
+    f"execute if score #done {OBJ} matches 0 if score #x_one {OBJ} matches 0 run function {NS}:special/x_one",
+    f"execute if score #done {OBJ} matches 0 if score #x_sign {OBJ} matches 0 run function {NS}:special/x_zero",
+    f"execute if score #done {OBJ} matches 0 if score #x_sign {OBJ} matches ..-1 run data modify storage {NS}:pow tmp.sign set value -1.0d",
+    f"execute if score #done {OBJ} matches 0 run function {NS}:dispatch",
+    f"execute store result score #result {OBJ} run compute default {storage('io.result')} scale {S}",
+])
+
+put("pow/score", [
+    f"execute store result storage {NS}:pow io.x double 0.001 run scoreboard players get #x {OBJ}",
+    f"execute store result storage {NS}:pow io.y double 0.001 run scoreboard players get #y {OBJ}",
+    f"function {NS}:pow/storage",
+    f"execute store result score #out {OBJ} run compute default {storage('io.result')} scale 1000",
+])
+
+put("special/y_zero", [
+    f"data modify storage {NS}:pow io.result set value 1.0d",
+    f"data modify storage {NS}:pow tmp.status set value 0",
+    f"scoreboard players set #done {OBJ} 1",
+])
+
+put("special/x_one", [
+    f"data modify storage {NS}:pow io.result set value 1.0d",
+    f"data modify storage {NS}:pow tmp.status set value 0",
+    f"scoreboard players set #done {OBJ} 1",
+])
+
+put("special/x_zero", [
+    f"execute if score #y {OBJ} matches 1.. run data modify storage {NS}:pow io.result set value 0.0d",
+    f"execute if score #y {OBJ} matches 1.. run data modify storage {NS}:pow tmp.status set value 0",
+    f"execute if score #y {OBJ} matches ..-1 run data modify storage {NS}:pow tmp.status set value 2",
+    f"scoreboard players set #done {OBJ} 1",
+])
+
+put("dispatch", [
+    f"scoreboard players operation #p {OBJ} = #y {OBJ}",
+    f"scoreboard players set #q {OBJ} {S}",
+    f"scoreboard players operation #y_int {OBJ} = #p {OBJ}",
+    f"scoreboard players operation #y_int {OBJ} /= #q {OBJ}",
+    f"scoreboard players operation #y_mod {OBJ} = #p {OBJ}",
+    f"scoreboard players operation #y_mod {OBJ} %= #q {OBJ}",
+    f"execute if score #y_mod {OBJ} matches 0 run function {NS}:integer/setup",
+    f"execute unless score #y_mod {OBJ} matches 0 run function {NS}:rational/setup",
+])
+
+# Euclid reduction of the finite fixed-point decimal y = p / 2^20.
+put("rational/setup", [
+    f"scoreboard players operation #a {OBJ} = #p {OBJ}",
+    f"execute if score #a {OBJ} matches ..-1 run scoreboard players operation #a {OBJ} *= #-1 {OBJ}",
+    f"scoreboard players operation #b {OBJ} = #q {OBJ}",
+    f"function {NS}:rational/gcd",
+])
+
+put("rational/gcd", [
+    f"execute unless score #b {OBJ} matches 0 run function {NS}:rational/gcd_step",
+    f"execute if score #b {OBJ} matches 0 run function {NS}:rational/reduced",
+])
+
+put("rational/gcd_step", [
+    f"scoreboard players operation #r {OBJ} = #a {OBJ}",
+    f"scoreboard players operation #r {OBJ} %= #b {OBJ}",
+    f"scoreboard players operation #a {OBJ} = #b {OBJ}",
+    f"scoreboard players operation #b {OBJ} = #r {OBJ}",
+    f"function {NS}:rational/gcd",
+])
+
+put("rational/reduced", [
+    f"scoreboard players operation #p {OBJ} /= #a {OBJ}",
+    f"scoreboard players operation #q {OBJ} /= #a {OBJ}",
+    f"scoreboard players operation #p_abs {OBJ} = #p {OBJ}",
+    f"execute if score #p_abs {OBJ} matches ..-1 run scoreboard players operation #p_abs {OBJ} *= #-1 {OBJ}",
+    f"scoreboard players operation #parity {OBJ} = #p_abs {OBJ}",
+    f"scoreboard players operation #parity {OBJ} %= #2 {OBJ}",
+    f"scoreboard players operation #q_parity {OBJ} = #q {OBJ}",
+    f"scoreboard players operation #q_parity {OBJ} %= #2 {OBJ}",
+    f"execute if score #x_sign {OBJ} matches ..-1 if score #q_parity {OBJ} matches 0 run function {NS}:special/domain",
+    f"execute unless score #done {OBJ} matches 1 if score #x_sign {OBJ} matches ..-1 if score #parity {OBJ} matches 1 run data modify storage {NS}:pow tmp.negate_result set value 1b",
+    f"execute unless score #done {OBJ} matches 1 if score #q {OBJ} matches 2 run function {NS}:rational/root_2",
+    f"execute unless score #done {OBJ} matches 1 if score #q {OBJ} matches 4 run function {NS}:rational/root_4",
+    f"execute unless score #done {OBJ} matches 1 if score #q {OBJ} matches 8 run function {NS}:rational/root_8",
+    f"execute unless score #done {OBJ} matches 1 if score #q {OBJ} matches 16 run function {NS}:rational/root_16",
+    f"execute unless score #done {OBJ} matches 1 unless score #q {OBJ} matches 2 unless score #q {OBJ} matches 4 unless score #q {OBJ} matches 8 unless score #q {OBJ} matches 16 run function {NS}:generic/start",
+])
+
+put("special/domain", [
+    f"data modify storage {NS}:pow tmp.status set value 1",
+    f"scoreboard players set #done {OBJ} 1",
+])
+
+# Integer fast path is bounded. Wide results use the normalized generic path to
+# avoid forcing a large float through a 32-bit command result.
+put("integer/setup", [
+    f"scoreboard players operation #exp {OBJ} = #y_int {OBJ}",
+    f"scoreboard players operation #exp_abs {OBJ} = #exp {OBJ}",
+    f"execute if score #exp_abs {OBJ} matches ..-1 run scoreboard players operation #exp_abs {OBJ} *= #-1 {OBJ}",
+    f"execute if score #x_sign {OBJ} matches ..-1 run scoreboard players operation #parity {OBJ} = #exp_abs {OBJ}",
+    f"execute if score #x_sign {OBJ} matches ..-1 run scoreboard players operation #parity {OBJ} %= #2 {OBJ}",
+    f"execute if score #x_sign {OBJ} matches ..-1 if score #parity {OBJ} matches 1 run data modify storage {NS}:pow tmp.negate_result set value 1b",
+    f"execute if score #exp_abs {OBJ} matches ..16 run function {NS}:integer/fast_start",
+    f"execute if score #exp_abs {OBJ} matches 17.. run function {NS}:generic/start",
+])
+
+put("integer/fast_start", [
+    compute_score("#base_guard", AX),
+    f"execute if score #base_guard {OBJ} matches -10485760..10485760 run function {NS}:integer/fast_init",
+    f"execute unless score #base_guard {OBJ} matches -10485760..10485760 run function {NS}:generic/start",
+])
+
+put("integer/fast_init", [
+    compute_storage("tmp.base", AX),
+    f"data modify storage {NS}:pow tmp.acc set value 1.0d",
+    f"scoreboard players operation #exp_work {OBJ} = #exp_abs {OBJ}",
+    f"function {NS}:integer/loop",
+])
+
+put("integer/loop", [
+    f"execute if score #exp_work {OBJ} matches 1.. run scoreboard players operation #bit {OBJ} = #exp_work {OBJ}",
+    f"execute if score #exp_work {OBJ} matches 1.. run scoreboard players operation #bit {OBJ} %= #2 {OBJ}",
+    f"execute if score #exp_work {OBJ} matches 1.. if score #bit {OBJ} matches 1 run function {NS}:integer/mul_acc",
+    f"execute if score #exp_work {OBJ} matches 2.. run function {NS}:integer/square_base",
+    f"execute if score #exp_work {OBJ} matches 1.. run scoreboard players operation #exp_work {OBJ} /= #2 {OBJ}",
+    f"execute if score #exp_work {OBJ} matches 1.. run function {NS}:integer/loop",
+    f"execute if score #exp_work {OBJ} matches 0 run function {NS}:integer/finish",
+])
+
+put("integer/mul_acc", [
+    compute_storage("tmp.acc", product(storage("tmp.acc"), storage("tmp.base"))),
+])
+
+put("integer/square_base", [
+    compute_storage("tmp.base", product(storage("tmp.base"), storage("tmp.base"))),
+])
+
+put("integer/finish", [
+    f"execute if score #exp {OBJ} matches ..-1 run function {NS}:reciprocal/acc",
+    f"data modify storage {NS}:pow io.result set from storage {NS}:pow tmp.acc",
+    f"execute if data storage {NS}:pow {{tmp:{{negate_result:1b}}}} run function {NS}:finish/negate",
+    f"data modify storage {NS}:pow tmp.status set value 0",
+    f"scoreboard players set #done {OBJ} 1",
+])
+
+# Reciprocal Newton: r <- r * (2 - a*r). The fast path is deliberately
+# restricted to a in a range where 1/16 is a convergent seed.
+reciprocal_acc = [
+    f"data modify storage {NS}:pow tmp.recip_a set from storage {NS}:pow tmp.acc",
+    f"data modify storage {NS}:pow tmp.recip set value 0.0625d",
+]
+for _ in range(8):
+    reciprocal_acc.append(compute_storage("tmp.recip", product(storage("tmp.recip"), sum_of("2", product("-1", storage("tmp.recip_a"), storage("tmp.recip"))))))
+reciprocal_acc += [
+    f"data modify storage {NS}:pow tmp.acc set from storage {NS}:pow tmp.recip",
+]
+put("reciprocal/acc", reciprocal_acc)
+
+put("finish/negate", [
+    compute_storage("io.result", product("-1", storage("io.result"))),
+])
+
+# Power-of-two rational denominators use repeated square roots. Each sqrt uses
+# five Babylon/Newton steps; reciprocal is itself evaluated with product/sum.
+for roots in range(1, 5):
+    q = 2 ** roots
+    lines = [
+        compute_storage("tmp.root", AX),
+        f"data modify storage {NS}:pow tmp.root_q set value {q}",
+    ]
+    for _ in range(roots):
+        lines += [
+            f"data modify storage {NS}:pow tmp.root_a set from storage {NS}:pow tmp.root",
+            f"data modify storage {NS}:pow tmp.root_g set value 1.0d",
+        ]
+        for _ in range(6):
+            lines += [
+                f"data modify storage {NS}:pow tmp.recip_a set from storage {NS}:pow tmp.root_g",
+                f"data modify storage {NS}:pow tmp.recip set value 0.0625d",
+            ]
+            for _ in range(9):
+                lines.append(compute_storage("tmp.recip", product(storage("tmp.recip"), sum_of("2", product("-1", storage("tmp.recip_a"), storage("tmp.recip"))))))
+            lines += [compute_storage("tmp.root_g", product("0.5", sum_of(storage("tmp.root_g"), product(storage("tmp.root_a"), storage("tmp.recip")))))]
+        lines += [f"data modify storage {NS}:pow tmp.root set from storage {NS}:pow tmp.root_g"]
+    lines += [
+        f"data modify storage {NS}:pow tmp.base set from storage {NS}:pow tmp.root",
+        f"scoreboard players operation #exp {OBJ} = #p {OBJ}",
+        f"scoreboard players operation #exp_abs {OBJ} = #p_abs {OBJ}",
+        f"scoreboard players operation #exp_work {OBJ} = #p_abs {OBJ}",
+        f"data modify storage {NS}:pow tmp.acc set value 1.0d",
+        f"function {NS}:integer/loop",
+    ]
+    put(f"rational/root_{q}", lines)
+
+# Binary normalization tree. Comparisons happen near one, avoiding scoreboard
+# saturation even when the input itself spans the normal float exponent range.
+def make_norm(lo, hi):
+    name = f"normalize/{lo + 126}_{hi + 126}"
+    if lo == hi:
+        put(name, [f"scoreboard players set #k {OBJ} {lo}"])
+        return name
+    mid = (lo + hi + 1) // 2
+    lower = make_norm(lo, mid - 1)
+    upper = make_norm(mid, hi)
+    probe = product(AX, constant(2.0 ** (-mid)))
+    put(name, [
+        compute_score("#cmp", probe, 1024),
+        f"execute if score #cmp {OBJ} matches 1024.. run function {NS}:{upper}",
+        f"execute if score #cmp {OBJ} matches ..1023 run function {NS}:{lower}",
+    ])
+    return name
+
+
+# Brigadier parses provider constants as decimal float literals and rejects
+# values close to the IEEE float limit. Keep the runtime reduction tree in the
+# numerically useful, command-safe range; callers outside it are reported as
+# overflow/underflow by the generic dispatcher.
+norm_root = make_norm(-30, 30)
+
+put("generic/start", [
+    f"function {NS}:{norm_root}",
+    f"execute store result storage {NS}:pow tmp.k int 1 run scoreboard players get #k {OBJ}",
+    compute_storage("tmp.z", product(AX, storage("tmp.pow2_neg_k"))),
+    f"function {NS}:normalize/k_dispatch",
+])
+
+# k dispatch writes 2^-k before z is recomputed. This two-stage arrangement is
+# needed because providers cannot read a scoreboard exponent dynamically.
+put("generic/start", [
+    f"function {NS}:{norm_root}",
+    f"execute store result storage {NS}:pow tmp.k int 1 run scoreboard players get #k {OBJ}",
+    f"function {NS}:normalize/k_dispatch",
+])
+
+norm_dispatch = []
+for k in range(-30, 31):
+    norm_dispatch.append(f"execute if score #k {OBJ} matches {k} run function {NS}:normalize/k_{k + 30}")
+    put(f"normalize/k_{k + 30}", [
+        f"data modify storage {NS}:pow tmp.pow2_neg_k set value {number(2.0 ** (-k))}d",
+        compute_storage("tmp.z", product(AX, constant(2.0 ** (-k)))),
+        f"function {NS}:log2/index",
+    ])
+put("normalize/k_dispatch", norm_dispatch)
+
+log2_index = [
+    compute_score("#z", storage("tmp.z")),
+    f"scoreboard players remove #z {OBJ} {S}",
+    f"scoreboard players operation #seg {OBJ} = #z {OBJ}",
+    f"scoreboard players set #seg_div {OBJ} {S // SEGMENTS}",
+    f"scoreboard players operation #seg {OBJ} /= #seg_div {OBJ}",
+    f"execute if score #seg {OBJ} matches {SEGMENTS}.. run scoreboard players set #seg {OBJ} {SEGMENTS - 1}",
+]
+for i in range(SEGMENTS):
+    log2_index.append(f"execute if score #seg {OBJ} matches {i} run function {NS}:log2/segment_{i}")
+put("log2/index", log2_index)
+
+for i in range(SEGMENTS):
+    c = 1.0 + (i + 0.5) / SEGMENTS
+    u = product(sum_of(storage("tmp.z"), constant(-c)), constant(1.0 / c))
+    poly = product(u, sum_of(constant(INV_LN2), product(u, sum_of(constant(-INV_LN2 / 2), product(u, constant(INV_LN2 / 3))))))
+    provider = sum_of(storage("tmp.k"), constant(log2(c)), poly)
+    put(f"log2/segment_{i}", [
+        compute_storage("tmp.log2", provider),
+        f"function {NS}:exp2/start",
+    ])
+
+put("exp2/start", [
+    compute_score("#t", product(storage("io.y"), storage("tmp.log2"))),
+    f"scoreboard players operation #n {OBJ} = #t {OBJ}",
+    f"scoreboard players set #scale {OBJ} {S}",
+    f"scoreboard players operation #n {OBJ} /= #scale {OBJ}",
+    f"scoreboard players operation #r {OBJ} = #t {OBJ}",
+    f"scoreboard players operation #r {OBJ} %= #scale {OBJ}",
+    f"execute if score #r {OBJ} matches ..-1 run scoreboard players remove #n {OBJ} 1",
+    f"execute if score #r {OBJ} matches ..-1 run scoreboard players add #r {OBJ} {S}",
+    f"execute if score #r {OBJ} matches {S // 2 + 1}.. run scoreboard players add #n {OBJ} 1",
+    f"execute if score #r {OBJ} matches {S // 2 + 1}.. run scoreboard players remove #r {OBJ} {S}",
+    f"execute if score #n {OBJ} matches 128.. run function {NS}:special/overflow",
+    f"execute if score #n {OBJ} matches ..-150 run function {NS}:special/underflow",
+    f"execute if score #n {OBJ} matches -149..127 run function {NS}:exp2/index",
+])
+
+exp2_index = [
+    f"execute store result storage {NS}:pow tmp.r double {number(1 / S)} run scoreboard players get #r {OBJ}",
+    f"scoreboard players add #r {OBJ} {S // 2}",
+    f"scoreboard players operation #seg {OBJ} = #r {OBJ}",
+    f"scoreboard players set #seg_div {OBJ} {S // SEGMENTS}",
+    f"scoreboard players operation #seg {OBJ} /= #seg_div {OBJ}",
+    f"execute if score #seg {OBJ} matches {SEGMENTS}.. run scoreboard players set #seg {OBJ} {SEGMENTS - 1}",
+]
+for i in range(SEGMENTS):
+    exp2_index.append(f"execute if score #seg {OBJ} matches {i} run function {NS}:exp2/segment_{i}")
+put("exp2/index", exp2_index)
+
+for i in range(SEGMENTS):
+    c = -0.5 + (i + 0.5) / SEGMENTS
+    v = sum_of(storage("tmp.r"), constant(-c))
+    poly = sum_of("1", product(v, sum_of(constant(LN2), product(v, sum_of(constant(LN2 * LN2 / 2), product(v, constant(LN2 ** 3 / 6)))))))
+    provider = product(constant(2.0 ** c), poly)
+    put(f"exp2/segment_{i}", [
+        compute_score("#exp_part", provider),
+        f"function {NS}:exp2/n_dispatch",
+    ])
+
+exp_dispatch = []
+for n in range(-149, 128):
+    exp_dispatch.append(f"execute if score #n {OBJ} matches {n} run function {NS}:exp2/n_{n + 149}")
+    put(f"exp2/n_{n + 149}", [
+        f"execute store result storage {NS}:pow io.result double {number((2.0 ** n) / S)} run scoreboard players get #exp_part {OBJ}",
+        f"execute if data storage {NS}:pow {{tmp:{{negate_result:1b}}}} run function {NS}:finish/negate",
+        f"data modify storage {NS}:pow tmp.status set value 0",
+        f"scoreboard players set #done {OBJ} 1",
+    ])
+put("exp2/n_dispatch", exp_dispatch)
+
+put("special/overflow", [
+    f"data modify storage {NS}:pow tmp.status set value 2",
+    f"scoreboard players set #done {OBJ} 1",
+])
+
+put("special/underflow", [
+    f"data modify storage {NS}:pow io.result set value 0.0d",
+    f"data modify storage {NS}:pow tmp.status set value 3",
+    f"scoreboard players set #done {OBJ} 1",
+])
+
+# Score constants and a small benchmark harness. #units is a deterministic
+# command-cost counter; MSPT is measured externally by the server profiler.
+put("constants", [
+    f"scoreboard players set #-1 {OBJ} -1",
+    f"scoreboard players set #2 {OBJ} 2",
+])
+
+put("benchmark/storage", [
+    f"scoreboard players add #units {OBJ} 1",
+    f"function {NS}:pow/storage",
+])

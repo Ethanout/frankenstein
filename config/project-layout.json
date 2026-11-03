@@ -1,0 +1,28 @@
+{
+  "projectRoots": [
+    "projects"
+  ],
+  "projectManifest": "project.json",
+  "templateRoots": [
+    "templates"
+  ],
+  "sharedRoots": [
+    "packages",
+    "build_tools",
+    "tests",
+    "docs"
+  ],
+  "generatedDirectories": [
+    "build",
+    "dist",
+    ".beet_cache",
+    ".cache",
+    "coverage",
+    ".vite",
+    ".next",
+    ".nuxt",
+    ".output",
+    ".svelte-kit",
+    ".astro"
+  ]
+}

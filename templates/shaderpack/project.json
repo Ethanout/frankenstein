@@ -1,0 +1,16 @@
+{
+  "id": "shader-project",
+  "components": {
+    "resourcepack": {
+      "type": "resourcepack",
+      "source": "resourcepack"
+    }
+  },
+  "targets": {
+    "resourcepack": {
+      "components": [
+        "resourcepack"
+      ]
+    }
+  }
+}

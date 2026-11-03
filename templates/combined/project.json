@@ -1,0 +1,36 @@
+{
+  "id": "combined-project",
+  "components": {
+    "datapack": {
+      "type": "datapack",
+      "source": "datapack"
+    },
+    "resourcepack": {
+      "type": "resourcepack",
+      "source": "resourcepack"
+    },
+    "world": {
+      "type": "world",
+      "source": "world"
+    }
+  },
+  "targets": {
+    "datapack": {
+      "components": [
+        "datapack"
+      ]
+    },
+    "resourcepack": {
+      "components": [
+        "resourcepack"
+      ]
+    },
+    "map": {
+      "components": [
+        "datapack",
+        "resourcepack",
+        "world"
+      ]
+    }
+  }
+}

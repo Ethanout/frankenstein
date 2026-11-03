@@ -1,0 +1,36 @@
+.beet_cache/
+build/
+__pycache__/
+
+# Local downloads and extracted game files
+.download/
+.jar_extract/
+.snapshot/
+
+# Dependencies and generated output for projects, packages, and templates
+node_modules/
+.venv/
+dist/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Frontend framework output and caches
+.vite/
+.next/
+.nuxt/
+.output/
+.svelte-kit/
+.astro/
+
+# Local tooling and editor state
+.local/
+.idea/
+.vscode/settings.json
+*.log
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+!.env.*.example

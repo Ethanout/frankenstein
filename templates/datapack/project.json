@@ -1,0 +1,16 @@
+{
+  "id": "datapack-project",
+  "components": {
+    "datapack": {
+      "type": "datapack",
+      "source": "datapack"
+    }
+  },
+  "targets": {
+    "datapack": {
+      "components": [
+        "datapack"
+      ]
+    }
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "model": "float",
+  "range": "2^-30..2^30",
+  "results": [
+    {
+      "segments": 64,
+      "degree": 4,
+      "samples": 29999,
+      "max_absolute_error": 7.017113182160001e+59,
+      "max_relative_error": 3.9948835228716526e-11,
+      "reference_seconds": 0.05658199999015778
+    },
+    {
+      "segments": 32,
+      "degree": 4,
+      "samples": 29999,
+      "max_absolute_error": 4.5329930802558665e+60,
+      "max_relative_error": 1.3148231117380922e-09,
+      "reference_seconds": 0.05676319997292012
+    },
+    {
+      "segments": 64,
+      "degree": 3,
+      "samples": 29999,
+      "max_absolute_error": 2.669995873057542e+61,
+      "max_relative_error": 7.181482122653438e-09,
+      "reference_seconds": 0.05019969999557361
+    },
+    {
+      "segments": 16,
+      "degree": 4,
+      "samples": 29999,
+      "max_absolute_error": 3.2965406143872924e+62,
+      "max_relative_error": 4.05316732438272e-08,
+      "reference_seconds": 0.05802150000818074
+    },
+    {
+      "segments": 32,
+      "degree": 3,
+      "samples": 29999,
+      "max_absolute_error": 8.742814579730795e+63,
+      "max_relative_error": 1.0847296200262964e-07,
+      "reference_seconds": 0.05226229998515919
+    },
+    {
+      "segments": 64,
+      "degree": 2,
+      "samples": 29999,
+      "max_absolute_error": 1.4197018216441168e+63,
+      "max_relative_error": 1.1661556952497524e-06,
+      "reference_seconds": 0.04394740000134334
+    },
+    {
+      "segments": 16,
+      "degree": 3,
+      "samples": 29999,
+      "max_absolute_error": 5.245873152413911e+64,
+      "max_relative_error": 1.5458537162026235e-06,
+      "reference_seconds": 0.05165189999388531
+    },
+    {
+      "segments": 32,
+      "degree": 2,
+      "samples": 29999,
+      "max_absolute_error": 5.95480928820451e+65,
+      "max_relative_error": 9.113276728221663e-06,
+      "reference_seconds": 0.04501290002372116
+    },
+    {
+      "segments": 16,
+      "degree": 2,
+      "samples": 29999,
+      "max_absolute_error": 6.6997083028018924e+66,
+      "max_relative_error": 7.484263147236901e-05,
+      "reference_seconds": 0.0451430999673903
+    }
+  ]
+}
